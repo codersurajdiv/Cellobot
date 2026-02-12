@@ -5,14 +5,92 @@ const API_BASE = 'https://cellobot-production.up.railway.app';
 Office.onReady((info) => {
   if (info.host === Office.HostType.Excel) {
     document.getElementById('send-btn').addEventListener('click', onSend);
-    document.getElementById('message-input').addEventListener('keydown', (e) => {
+    const input = document.getElementById('message-input');
+    input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         onSend();
       }
     });
+    input.addEventListener('input', autoResizeTextarea);
+
+    // Suggestion chips
+    document.querySelectorAll('.chip').forEach((chip) => {
+      chip.addEventListener('click', () => {
+        const prompt = chip.getAttribute('data-prompt');
+        if (prompt) {
+          input.value = prompt;
+          autoResizeTextarea({ target: input });
+          onSend();
+        }
+      });
+    });
   }
 });
+
+function autoResizeTextarea(e) {
+  const ta = e && e.target ? e.target : document.getElementById('message-input');
+  if (!ta) return;
+  ta.style.height = 'auto';
+  ta.style.height = Math.min(ta.scrollHeight, 120) + 'px';
+}
+
+function hideWelcomeScreen() {
+  const welcome = document.getElementById('welcome-screen');
+  if (welcome) welcome.classList.add('hidden');
+}
+
+function showWelcomeScreen() {
+  const welcome = document.getElementById('welcome-screen');
+  if (welcome) welcome.classList.remove('hidden');
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function parseMarkdown(text) {
+  const escaped = escapeHtml(text);
+  const codeBlockPlaceholders = [];
+
+  // Extract code blocks first and replace with placeholders
+  let result = escaped.replace(/```([\s\S]*?)```/g, (_, code) => {
+    const trimmed = code.trim();
+    const idx = codeBlockPlaceholders.length;
+    codeBlockPlaceholders.push('<pre><code>' + trimmed + '</code></pre>');
+    return '\x00CODEBLOCK' + idx + '\x00';
+  });
+
+  // Inline code (`...`)
+  result = result.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+  // Bold (**text**)
+  result = result.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+
+  // Line breaks
+  result = result.replace(/\n/g, '<br>');
+
+  // Restore code blocks
+  codeBlockPlaceholders.forEach((html, idx) => {
+    result = result.replace('\x00CODEBLOCK' + idx + '\x00', html);
+  });
+
+  return result;
+}
+
+function addLoadingMessage(id) {
+  const div = document.createElement('div');
+  div.className = 'message assistant loading';
+  div.id = id;
+  const loader = document.createElement('span');
+  loader.className = 'loader-dots';
+  loader.innerHTML = '<span></span><span></span><span></span>';
+  div.appendChild(loader);
+  document.getElementById('message-thread').appendChild(div);
+  div.scrollIntoView({ behavior: 'smooth' });
+}
 
 async function getContext() {
   return Excel.run(async (context) => {
@@ -106,11 +184,18 @@ function indexToColLetters(idx) {
 }
 
 function addMessage(content, role, options = {}) {
+  hideWelcomeScreen();
+
   const div = document.createElement('div');
   div.className = `message ${role}`;
   if (options.id) div.id = options.id;
-  const text = document.createTextNode(content);
-  div.appendChild(text);
+
+  if (role === 'assistant' && !options.loading) {
+    div.innerHTML = parseMarkdown(content);
+  } else {
+    div.textContent = content;
+  }
+
   if (options.formula) {
     const btn = document.createElement('button');
     btn.className = 'insert-formula';
@@ -119,7 +204,8 @@ function addMessage(content, role, options = {}) {
     div.appendChild(document.createElement('br'));
     div.appendChild(btn);
   }
-  document.getElementById('chat-messages').appendChild(div);
+
+  document.getElementById('message-thread').appendChild(div);
   div.scrollIntoView({ behavior: 'smooth' });
 }
 
@@ -144,10 +230,11 @@ async function onSend() {
 
   sendBtn.disabled = true;
   input.value = '';
+  autoResizeTextarea({ target: input });
   addMessage(message, 'user');
 
   const loadingId = 'loading-' + Date.now();
-  addMessage('Thinking...', 'assistant', { id: loadingId });
+  addLoadingMessage(loadingId);
 
   let context = {};
   try {

@@ -5,22 +5,52 @@
   <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>CelloBot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
   <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
   <link rel="stylesheet" href="taskpane.css" />
 </head>
 <body>
   <div id="app">
-    <header>
-      <h1>CelloBot</h1>
-      <select id="model-select" aria-label="Select AI model">
-        <option value="claude">Claude</option>
-        <option value="openai">OpenAI</option>
-      </select>
+    <header class="top-bar">
+      <div class="logo-area">
+        <svg class="logo-icon" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M4 4h16v16H4V4z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M9 9h6v6H9z" fill="currentColor"/>
+        </svg>
+        <h1 class="app-title">CelloBot</h1>
+      </div>
+      <div class="status-dot" aria-hidden="true"></div>
     </header>
-    <main id="chat-messages"></main>
+
+    <main id="chat-messages" class="chat-area">
+      <div id="welcome-screen" class="welcome-screen">
+        <h2 class="welcome-title">How can I help with Excel today?</h2>
+        <p class="welcome-subtitle">Ask for formulas, explain existing ones, or get analysis help.</p>
+        <div class="suggestion-chips">
+          <button type="button" class="chip" data-prompt="Write a VLOOKUP to find product prices from a table">Write a VLOOKUP</button>
+          <button type="button" class="chip" data-prompt="Explain this formula in simple terms">Explain a formula</button>
+          <button type="button" class="chip" data-prompt="Sum the values in column A from row 2 to row 100">Sum a range</button>
+          <button type="button" class="chip" data-prompt="Create a COUNTIF to count cells greater than 50">Count with criteria</button>
+        </div>
+      </div>
+      <div id="message-thread" class="message-thread"></div>
+    </main>
+
     <div class="input-area">
-      <textarea id="message-input" placeholder="Ask for a formula or type =FORMULA to explain it..." rows="2"></textarea>
-      <button id="send-btn" type="button">Send</button>
+      <div class="input-container">
+        <select id="model-select" class="model-pill" aria-label="Select AI model">
+          <option value="claude">Claude</option>
+          <option value="openai">OpenAI</option>
+        </select>
+        <textarea id="message-input" placeholder="Ask for a formula or type =FORMULA to explain it..." rows="1"></textarea>
+        <button id="send-btn" type="button" class="send-btn" aria-label="Send">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
     </div>
   </div>
   <script src="taskpane.js"></script>
