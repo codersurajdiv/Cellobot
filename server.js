@@ -25,9 +25,16 @@ app.use(express.json());
 
 app.use('/chat', chatRouter);
 
-// Serve static files if add-in folder exists (for local dev)
+// Serve static files - check multiple locations for dev/prod compatibility
 const addinPath = path.join(__dirname, '../add-in/src');
-app.use(express.static(addinPath));
+const publicPath = path.join(__dirname, 'public');
+const fs = require('fs');
+
+if (fs.existsSync(publicPath)) {
+  app.use(express.static(publicPath));
+} else if (fs.existsSync(addinPath)) {
+  app.use(express.static(addinPath));
+}
 
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
