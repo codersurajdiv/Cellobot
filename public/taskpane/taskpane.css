@@ -66,12 +66,39 @@ body {
   color: var(--text-primary);
 }
 
-.status-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--accent);
-  opacity: 0.8;
+.header-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.header-btn {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.header-btn svg {
+  width: 16px;
+  height: 16px;
+  color: var(--text-secondary);
+}
+
+.header-btn:hover {
+  background: var(--bg-elevated);
+  border-color: var(--border-hover);
+}
+
+.header-btn:hover svg {
+  color: var(--text-primary);
 }
 
 /* Chat area */
@@ -359,4 +386,67 @@ body {
   color: #e57373;
   font-size: 13px;
   padding: 8px;
+}
+
+/* Cell citations */
+.cell-citation {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 1px 4px;
+  background: var(--accent-muted);
+  border-radius: 3px;
+  font-size: 13px;
+  transition: background 0.15s;
+}
+
+.cell-citation:hover {
+  background: rgba(124, 92, 252, 0.25);
+  text-decoration: underline;
+}
+
+/* Change tracker bar */
+.change-tracker {
+  padding: 8px 16px;
+  background: var(--bg-tertiary);
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+
+.change-tracker.hidden {
+  display: none;
+}
+
+.change-count {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.undo-btn {
+  padding: 4px 12px;
+  background: transparent;
+  border: 1px solid #e57373;
+  border-radius: 4px;
+  font-size: 12px;
+  font-family: inherit;
+  color: #e57373;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.undo-btn:hover {
+  background: rgba(229, 115, 115, 0.15);
+}
+
+/* Tool execution status messages */
+.message.tool-status {
+  color: var(--text-muted);
+  font-size: 12px;
+  font-style: italic;
+  padding: 4px 16px;
+  margin-bottom: 4px;
 }

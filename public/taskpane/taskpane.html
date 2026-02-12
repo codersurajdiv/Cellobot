@@ -21,7 +21,18 @@
         </svg>
         <h1 class="app-title">CelloBot</h1>
       </div>
-      <div class="status-dot" aria-hidden="true"></div>
+      <div class="header-actions">
+        <button id="export-chat-btn" type="button" class="header-btn" aria-label="Export chat" title="Export chat">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <button id="new-chat-btn" type="button" class="header-btn" aria-label="New chat" title="New chat">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
     </header>
 
     <main id="chat-messages" class="chat-area">
@@ -38,11 +49,18 @@
       <div id="message-thread" class="message-thread"></div>
     </main>
 
+    <div id="change-tracker" class="change-tracker hidden">
+      <span class="change-count">0 changes made</span>
+      <button id="undo-all-btn" type="button" class="undo-btn" aria-label="Undo all changes">Undo All</button>
+    </div>
+
     <div class="input-area">
       <div class="input-container">
         <select id="model-select" class="model-pill" aria-label="Select AI model">
-          <option value="claude">Claude</option>
-          <option value="openai">OpenAI</option>
+          <option value="claude-sonnet">Sonnet 4.5</option>
+          <option value="claude-opus">Opus 4.6</option>
+          <option value="openai-4o">GPT-4o</option>
+          <option value="openai-4o-mini">GPT-4o Mini</option>
         </select>
         <textarea id="message-input" placeholder="Ask for a formula or type =FORMULA to explain it..." rows="1"></textarea>
         <button id="send-btn" type="button" class="send-btn" aria-label="Send">
@@ -53,6 +71,8 @@
       </div>
     </div>
   </div>
+  <script src="changeTracker.js"></script>
+  <script src="toolExecutor.js"></script>
   <script src="taskpane.js"></script>
 </body>
 </html>

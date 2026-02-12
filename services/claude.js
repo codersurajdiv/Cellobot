@@ -1,23 +1,62 @@
 const Anthropic = require('@anthropic-ai/sdk');
+const { anthropicTools } = require('../tools/definitions');
 
-async function chat(systemPrompt, userMessage) {
+const DEFAULT_MODEL = 'claude-sonnet-4-5-20250514';
+
+function getClient() {
   if (!process.env.ANTHROPIC_API_KEY) {
     throw new Error('ANTHROPIC_API_KEY is not configured');
   }
+  return new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+}
 
-  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+/**
+ * Simple chat without tools.
+ */
+async function chat(systemPrompt, messages, modelId) {
+  const anthropic = getClient();
 
-  const message = await anthropic.messages.create({
-    model: 'claude-3-5-sonnet-20241022',
-    max_tokens: 1024,
+  const response = await anthropic.messages.create({
+    model: modelId || DEFAULT_MODEL,
+    max_tokens: 4096,
     system: systemPrompt,
-    messages: [
-      { role: 'user', content: userMessage }
-    ]
+    messages: messages
   });
 
-  const textBlock = message.content.find(block => block.type === 'text');
+  const textBlock = response.content.find(block => block.type === 'text');
   return textBlock ? textBlock.text.trim() : '';
 }
 
-module.exports = { chat };
+/**
+ * Chat with tool-use support.
+ */
+async function chatWithTools(systemPrompt, messages, modelId) {
+  const anthropic = getClient();
+
+  const response = await anthropic.messages.create({
+    model: modelId || DEFAULT_MODEL,
+    max_tokens: 4096,
+    system: systemPrompt,
+    messages: messages,
+    tools: anthropicTools
+  });
+
+  const textBlocks = response.content.filter(b => b.type === 'text');
+  const toolBlocks = response.content.filter(b => b.type === 'tool_use');
+
+  const text = textBlocks.map(b => b.text).join('\n').trim();
+  const toolCalls = toolBlocks.map(b => ({
+    id: b.id,
+    name: b.name,
+    input: b.input
+  }));
+
+  return {
+    text,
+    toolCalls,
+    stopReason: response.stop_reason,
+    rawContent: response.content
+  };
+}
+
+module.exports = { chat, chatWithTools, DEFAULT_MODEL };
