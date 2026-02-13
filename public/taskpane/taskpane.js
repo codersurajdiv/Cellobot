@@ -12,6 +12,7 @@ let conversationHistory = [];
 // Each entry: { id, sheet, range, label, mode: 'full'|'sample', sampleRows: 50, rowCount, columnCount }
 let pinnedRanges = [];
 const DEFAULT_SAMPLE_ROWS = 50;
+const MAX_PINNED_CELLS = 100000;
 
 function getContextWindowSize(modelValue) {
   const val = (modelValue || 'claude-sonnet').toLowerCase();
@@ -43,30 +44,41 @@ async function addPinnedRange(sheet, range, label, mode = 'full', rowCount, colu
   const key = `${sheet}!${range}`;
   if (pinnedRanges.some(p => `${p.sheet}!${p.range}` === key)) return;
 
+  let effectiveRange = range;
   let rows = rowCount;
   let cols = columnCount;
-  if (rows == null || cols == null) {
-    try {
-      const dims = await Excel.run(async (ctx) => {
-        const ws = ctx.workbook.worksheets.getItem(sheet);
-        const r = ws.getRange(range);
-        r.load('rowCount,columnCount');
-        await ctx.sync();
-        return { rowCount: r.rowCount, columnCount: r.columnCount };
-      });
-      rows = dims.rowCount;
-      cols = dims.columnCount;
-    } catch (e) {
-      rows = rows || 0;
-      cols = cols || 0;
+
+  try {
+    const dims = await Excel.run(async (ctx) => {
+      const ws = ctx.workbook.worksheets.getItem(sheet);
+      const r = ws.getRange(range);
+      const used = r.getUsedRangeOrNullObject(false);
+      used.load('address,rowCount,columnCount');
+      await ctx.sync();
+
+      if (used.isNullObject) {
+        return null;
+      }
+      const addr = used.address.replace(/^.*!/, '');
+      return { address: addr, rowCount: used.rowCount, columnCount: used.columnCount };
+    });
+    if (!dims) {
+      addMessage('Selected range has no data. Nothing to pin.', 'assistant', { className: 'tool-status' });
+      return;
     }
+    effectiveRange = dims.address;
+    rows = dims.rowCount;
+    cols = dims.columnCount;
+  } catch (e) {
+    rows = rows ?? 0;
+    cols = cols ?? 0;
   }
 
   const entry = {
     id: 'pinned-' + Date.now() + '-' + Math.random().toString(36).substring(7),
     sheet,
-    range,
-    label: label || `${sheet}!${range}`,
+    range: effectiveRange,
+    label: label || `${sheet}!${effectiveRange}`,
     mode: mode || 'full',
     sampleRows: DEFAULT_SAMPLE_ROWS,
     rowCount: rows,
@@ -101,6 +113,16 @@ async function getPinnedContext() {
     const results = [];
     for (const p of pinnedRanges) {
       try {
+        const cellCount = (p.rowCount || 0) * (p.columnCount || 0);
+        if (cellCount > MAX_PINNED_CELLS) {
+          results.push({
+            sheet: p.sheet,
+            range: p.range,
+            error: `Range too large (${cellCount.toLocaleString()} cells). Maximum is ${MAX_PINNED_CELLS.toLocaleString()}. Try a smaller selection or use Sample mode.`
+          });
+          continue;
+        }
+
         const sheet = ctx.workbook.worksheets.getItem(p.sheet);
         const range = sheet.getRange(p.range);
         range.load('values,formulas,rowCount,columnCount');
@@ -113,6 +135,22 @@ async function getPinnedContext() {
           const limit = p.sampleRows || DEFAULT_SAMPLE_ROWS;
           values = values.slice(0, limit);
           formulas = formulas.slice(0, limit);
+        }
+
+        if (p.mode === 'sample' && values.length > 0) {
+          const populatedColIndices = [];
+          const colCount = values[0].length;
+          for (let c = 0; c < colCount; c++) {
+            const hasData = values.some(row => {
+              const v = row[c];
+              return v !== '' && v !== null && v !== undefined;
+            });
+            if (hasData) populatedColIndices.push(c);
+          }
+          if (populatedColIndices.length < colCount) {
+            values = values.map(row => populatedColIndices.map(c => row[c]));
+            formulas = formulas.map(row => populatedColIndices.map(c => row[c]));
+          }
         }
 
         const headers = values.length > 0 ? values[0].map(v => (v != null ? String(v).trim() : '')) : [];
