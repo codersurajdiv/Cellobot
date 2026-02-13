@@ -1,9 +1,33 @@
 /* global Office, Excel */
 
+// Prevent unhandled errors from crashing the WebView
+window.onerror = function(message, source, lineno, colno, error) {
+  console.error('Global error:', message, source, lineno, colno, error);
+  return true;
+};
+
+window.addEventListener('unhandledrejection', function(event) {
+  console.warn('Unhandled promise rejection:', event.reason);
+  event.preventDefault();
+});
+
 // Auto-detect dev vs production environment
 const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
   ? `https://${window.location.host}`
   : 'https://cellobot-production.up.railway.app';
+
+// Queue Excel.run calls to prevent concurrent access conflicts
+let excelRunQueue = Promise.resolve();
+
+function safeExcelRun(fn) {
+  excelRunQueue = excelRunQueue.then(() =>
+    Excel.run(fn).catch(err => {
+      console.warn('Excel.run failed:', err);
+      return null;
+    })
+  );
+  return excelRunQueue;
+}
 
 // Conversation history for multi-turn context
 let conversationHistory = [];
@@ -13,6 +37,51 @@ let conversationHistory = [];
 let pinnedRanges = [];
 const DEFAULT_SAMPLE_ROWS = 50;
 const MAX_PINNED_CELLS = 100000;
+
+const STORAGE_KEY_CONVERSATION = 'cellobot_conversation';
+const STORAGE_KEY_PINNED = 'cellobot_pinned';
+
+function persistState() {
+  try {
+    localStorage.setItem(STORAGE_KEY_CONVERSATION, JSON.stringify(conversationHistory));
+    localStorage.setItem(STORAGE_KEY_PINNED, JSON.stringify(pinnedRanges));
+  } catch (e) {
+    /* ignore storage errors */
+  }
+}
+
+function restoreState() {
+  try {
+    const savedConv = localStorage.getItem(STORAGE_KEY_CONVERSATION);
+    const savedPinned = localStorage.getItem(STORAGE_KEY_PINNED);
+    if (savedConv) {
+      conversationHistory = JSON.parse(savedConv);
+    }
+    if (savedPinned) {
+      pinnedRanges = JSON.parse(savedPinned);
+    }
+    if (conversationHistory.length > 0 || pinnedRanges.length > 0) {
+      hideWelcomeScreen();
+      const thread = document.getElementById('message-thread');
+      if (thread) thread.innerHTML = '';
+      for (const msg of conversationHistory) {
+        addMessage(msg.content, msg.role);
+      }
+      updateContextUI();
+    }
+  } catch (e) {
+    /* ignore restore errors */
+  }
+}
+
+function clearPersistedState() {
+  try {
+    localStorage.removeItem(STORAGE_KEY_CONVERSATION);
+    localStorage.removeItem(STORAGE_KEY_PINNED);
+  } catch (e) {
+    /* ignore */
+  }
+}
 
 function getContextWindowSize(modelValue) {
   const val = (modelValue || 'claude-sonnet').toLowerCase();
@@ -49,7 +118,7 @@ async function addPinnedRange(sheet, range, label, mode = 'full', rowCount, colu
   let cols = columnCount;
 
   try {
-    const dims = await Excel.run(async (ctx) => {
+    const dims = await safeExcelRun(async (ctx) => {
       const ws = ctx.workbook.worksheets.getItem(sheet);
       const r = ws.getRange(range);
       const used = r.getUsedRangeOrNullObject(false);
@@ -86,16 +155,19 @@ async function addPinnedRange(sheet, range, label, mode = 'full', rowCount, colu
   };
   pinnedRanges.push(entry);
   updateContextUI();
+  persistState();
 }
 
 function removePinnedRange(id) {
   pinnedRanges = pinnedRanges.filter(p => p.id !== id);
   updateContextUI();
+  persistState();
 }
 
 function clearAllPinned() {
   pinnedRanges = [];
   updateContextUI();
+  persistState();
 }
 
 function togglePinnedRangeMode(id) {
@@ -103,13 +175,14 @@ function togglePinnedRangeMode(id) {
   if (p) {
     p.mode = p.mode === 'full' ? 'sample' : 'full';
     updateContextUI();
+    persistState();
   }
 }
 
 async function getPinnedContext() {
   if (pinnedRanges.length === 0) return [];
 
-  return Excel.run(async (ctx) => {
+  return safeExcelRun(async (ctx) => {
     const results = [];
     for (const p of pinnedRanges) {
       try {
@@ -192,12 +265,28 @@ function closeContextPanel() {
   if (panel) panel.classList.add('hidden');
 }
 
+function updateContextIndicator() {
+  safeExcelRun(async (ctx) => {
+    const sheet = ctx.workbook.worksheets.getActiveWorksheet();
+    const range = ctx.workbook.getSelectedRange();
+    sheet.load('name');
+    range.load('address');
+    await ctx.sync();
+    return { sheetName: sheet.name, address: range.address.replace(/^.*!/, '') };
+  }).then((result) => {
+    const el = document.getElementById('context-indicator');
+    if (el && result) {
+      el.textContent = `${result.sheetName} · ${result.address}`;
+    }
+  });
+}
+
 async function loadSheetList() {
   const container = document.getElementById('sheet-list');
   if (!container) return;
 
   try {
-    const sheetData = await Excel.run(async (ctx) => {
+    const sheetData = await safeExcelRun(async (ctx) => {
       const sheets = ctx.workbook.worksheets;
       sheets.load('items/name');
       await ctx.sync();
@@ -242,6 +331,11 @@ async function loadSheetList() {
       }
       return result;
     });
+
+    if (!sheetData) {
+      container.innerHTML = '<p style="color: var(--text-muted); font-size: 13px;">Could not load sheets. Make sure Excel is ready.</p>';
+      return;
+    }
 
     container.innerHTML = '';
     for (const s of sheetData) {
@@ -308,7 +402,7 @@ function updateTokenMeter() {
 
 async function captureCurrentSelection() {
   try {
-    const result = await Excel.run(async (ctx) => {
+    const result = await safeExcelRun(async (ctx) => {
       const range = ctx.workbook.getSelectedRange();
       const sheet = ctx.workbook.worksheets.getActiveWorksheet();
       range.load('address,rowCount,columnCount');
@@ -321,6 +415,10 @@ async function captureCurrentSelection() {
         columnCount: range.columnCount
       };
     });
+    if (!result) {
+      addMessage('Could not capture selection. Make sure a range is selected.', 'assistant', { className: 'tool-status' });
+      return;
+    }
     await addPinnedRange(result.sheet, result.range, `${result.sheet}!${result.range}`, 'full', result.rowCount, result.columnCount);
   } catch (err) {
     console.warn('Could not capture selection:', err);
@@ -396,6 +494,21 @@ Office.onReady((info) => {
     });
     input.addEventListener('input', autoResizeTextarea);
 
+    restoreState();
+
+    // Live context indicator (sheet + selection)
+    try {
+      safeExcelRun(async (ctx) => {
+        const sheet = ctx.workbook.worksheets.getActiveWorksheet();
+        sheet.onSelectionChanged.add(() => updateContextIndicator());
+        ctx.workbook.onActiveSheetChanged.add(() => updateContextIndicator());
+        await ctx.sync();
+      });
+      updateContextIndicator();
+    } catch (e) {
+      /* ignore */
+    }
+
     // Check backend health on load
     checkBackendHealth();
 
@@ -465,6 +578,7 @@ function onNewChat() {
   pinnedRanges = [];
   document.getElementById('message-thread').innerHTML = '';
   clearChangeLog();
+  clearPersistedState();
   updateContextUI();
   showWelcomeScreen();
 }
@@ -589,7 +703,7 @@ function addLoadingMessage(id) {
 }
 
 async function getContext() {
-  return Excel.run(async (context) => {
+  return safeExcelRun(async (context) => {
     const workbook = context.workbook;
     const sheet = workbook.worksheets.getActiveWorksheet();
     const selectedRange = workbook.getSelectedRange();
@@ -628,32 +742,34 @@ async function getContext() {
       sheetSummaries.push(ws.name);
     }
 
-    // --- Headers from used range (not hardcoded A-J) ---
+    // --- Batch load: headers, nearby formulas, errors, tables, named ranges (single sync) ---
     let headers = [];
     let usedRangeAddress = null;
+    const nearbyFormulas = [];
+    const errors = [];
+    let tableNames = [];
+    let namedRanges = [];
+
     try {
       const usedRange = sheet.getUsedRange();
-      usedRange.load('address,rowCount,columnCount');
-      await context.sync();
-      usedRangeAddress = usedRange.address.replace(/^.*!/, '');
-
-      // Read first row as headers
       const headerRow = usedRange.getRow(0);
+      const expanded = selectedRange.getOffsetRange(-2, -2).getBoundingRect(selectedRange.getOffsetRange(2, 2));
+      const tables = sheet.tables;
+      const names = workbook.names;
+
+      usedRange.load('address,rowCount,columnCount');
       headerRow.load('values');
+      expanded.load('formulas,values,address');
+      tables.load('items/name,items/columns/items/name');
+      names.load('items/name,items/value');
+
       await context.sync();
+
+      usedRangeAddress = usedRange.address.replace(/^.*!/, '');
       if (headerRow.values && headerRow.values[0]) {
         headers = headerRow.values[0].map(v => (v != null ? String(v).trim() : '')).filter(Boolean);
       }
-    } catch (e) {
-      // Sheet may be empty — no used range
-    }
 
-    // --- Nearby formulas (expanded range, no cap) ---
-    const nearbyFormulas = [];
-    try {
-      const expanded = selectedRange.getOffsetRange(-2, -2).getBoundingRect(selectedRange.getOffsetRange(2, 2));
-      expanded.load('formulas,address');
-      await context.sync();
       if (expanded.formulas) {
         expanded.formulas.forEach((row, r) => {
           (row || []).forEach((cell, c) => {
@@ -666,56 +782,29 @@ async function getContext() {
           });
         });
       }
-    } catch (e) {
-      // Ignore if range is out of bounds
-    }
 
-    // --- Detect errors in selected range and nearby ---
-    const errors = [];
-    try {
-      const scanRange = selectedRange.getOffsetRange(-2, -2).getBoundingRect(selectedRange.getOffsetRange(2, 2));
-      scanRange.load('values,address');
-      await context.sync();
-      if (scanRange.values) {
-        const errorTypes = ['#REF!', '#VALUE!', '#N/A', '#DIV/0!', '#NAME?', '#NULL!', '#NUM!'];
-        scanRange.values.forEach((row, r) => {
+      const errorTypes = ['#REF!', '#VALUE!', '#N/A', '#DIV/0!', '#NAME?', '#NULL!', '#NUM!'];
+      if (expanded.values) {
+        expanded.values.forEach((row, r) => {
           (row || []).forEach((cell, c) => {
             if (typeof cell === 'string' && errorTypes.includes(cell)) {
-              const cellAddr = getCellAddress(scanRange.address, r, c);
+              const cellAddr = getCellAddress(expanded.address, r, c);
               errors.push({ address: cellAddr, error: cell });
             }
           });
         });
       }
-    } catch (e) {
-      // Ignore scan errors
-    }
 
-    // --- Tables on active sheet ---
-    const tableNames = [];
-    try {
-      const tables = sheet.tables;
-      tables.load('items/name,items/columns/items/name');
-      await context.sync();
       for (const table of tables.items) {
         const colNames = table.columns.items.map(col => col.name);
         tableNames.push({ name: table.name, columns: colNames });
       }
-    } catch (e) {
-      // Tables API may not be available
-    }
 
-    // --- Named ranges ---
-    const namedRanges = [];
-    try {
-      const names = workbook.names;
-      names.load('items/name,items/value');
-      await context.sync();
       for (const n of names.items) {
         namedRanges.push({ name: n.name, value: n.value });
       }
     } catch (e) {
-      // Named ranges may not be accessible
+      // Sheet may be empty, range out of bounds, or APIs unavailable
     }
 
     return {
@@ -792,7 +881,7 @@ function addMessage(content, role, options = {}) {
 }
 
 function navigateToCell(ref) {
-  Excel.run(async (context) => {
+  safeExcelRun(async (context) => {
     // Handle references like "Sheet1!A1" or just "A1"
     let range;
     if (ref.includes('!')) {
@@ -807,14 +896,16 @@ function navigateToCell(ref) {
     }
     range.select();
     await context.sync();
-  }).catch(err => {
-    console.warn('Could not navigate to cell:', ref, err);
+  }).then((result) => {
+    if (result === null) {
+      console.warn('Could not navigate to cell:', ref);
+    }
   });
 }
 
 function insertFormula(formula) {
   const cleanFormula = formula.trim().startsWith('=') ? formula.trim() : '=' + formula.trim();
-  Excel.run(async (context) => {
+  safeExcelRun(async (context) => {
     const range = context.workbook.getSelectedRange();
     range.formulas = [[cleanFormula]];
     await context.sync();
@@ -832,8 +923,10 @@ function insertFormula(formula) {
     } else {
       addMessage(`Formula inserted into ${address}`, 'assistant', { className: 'tool-status' });
     }
-  }).catch(err => {
-    addMessage('Failed to insert: ' + err.message, 'assistant');
+  }).then((res) => {
+    if (res === null) {
+      addMessage('Failed to insert. Please try again.', 'assistant');
+    }
   });
 }
 
@@ -852,9 +945,11 @@ async function onSend() {
 
   // Add user message to conversation history
   conversationHistory.push({ role: 'user', content: message });
+  persistState();
 
   // Auto-compact if conversation is getting too long
   await maybeCompactHistory();
+  persistState();
 
   const loadingId = 'loading-' + Date.now();
   addLoadingMessage(loadingId);
@@ -1019,6 +1114,7 @@ async function processChat(messages, modelValue, context, loadingId, pendingMess
             if (data.text) {
               fullText = data.text;
               conversationHistory.push({ role: 'assistant', content: fullText });
+              persistState();
 
               if (streamDiv) {
                 streamDiv.innerHTML = parseMarkdown(fullText);

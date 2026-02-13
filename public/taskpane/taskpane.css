@@ -341,6 +341,16 @@ body {
   display: none;
 }
 
+.context-indicator {
+  font-size: 11px;
+  color: var(--text-muted);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .input-container {
   display: flex;
   align-items: flex-end;
