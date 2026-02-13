@@ -8,12 +8,338 @@ const API_BASE = (window.location.hostname === 'localhost' || window.location.ho
 // Conversation history for multi-turn context
 let conversationHistory = [];
 
+// Pinned context ranges (persists per chat session)
+// Each entry: { id, sheet, range, label, mode: 'full'|'sample', sampleRows: 50, rowCount, columnCount }
+let pinnedRanges = [];
+const DEFAULT_SAMPLE_ROWS = 50;
+
+function getContextWindowSize(modelValue) {
+  const val = (modelValue || 'claude-sonnet').toLowerCase();
+  switch (val) {
+    case 'claude-opus':
+    case 'claude-sonnet':
+    case 'claude':
+      return 200000;
+    case 'openai-4o':
+    case 'openai-4o-mini':
+    case 'openai':
+      return 128000;
+    default:
+      return 200000;
+  }
+}
+
+function estimatePinnedTokensSync() {
+  let total = 0;
+  for (const p of pinnedRanges) {
+    const rows = p.mode === 'sample' ? Math.min(p.rowCount || 0, p.sampleRows || DEFAULT_SAMPLE_ROWS) : (p.rowCount || 0);
+    const cols = p.columnCount || 0;
+    total += Math.ceil((rows * cols * 5) / 4);
+  }
+  return total;
+}
+
+async function addPinnedRange(sheet, range, label, mode = 'full', rowCount, columnCount) {
+  const key = `${sheet}!${range}`;
+  if (pinnedRanges.some(p => `${p.sheet}!${p.range}` === key)) return;
+
+  let rows = rowCount;
+  let cols = columnCount;
+  if (rows == null || cols == null) {
+    try {
+      const dims = await Excel.run(async (ctx) => {
+        const ws = ctx.workbook.worksheets.getItem(sheet);
+        const r = ws.getRange(range);
+        r.load('rowCount,columnCount');
+        await ctx.sync();
+        return { rowCount: r.rowCount, columnCount: r.columnCount };
+      });
+      rows = dims.rowCount;
+      cols = dims.columnCount;
+    } catch (e) {
+      rows = rows || 0;
+      cols = cols || 0;
+    }
+  }
+
+  const entry = {
+    id: 'pinned-' + Date.now() + '-' + Math.random().toString(36).substring(7),
+    sheet,
+    range,
+    label: label || `${sheet}!${range}`,
+    mode: mode || 'full',
+    sampleRows: DEFAULT_SAMPLE_ROWS,
+    rowCount: rows,
+    columnCount: cols
+  };
+  pinnedRanges.push(entry);
+  updateContextUI();
+}
+
+function removePinnedRange(id) {
+  pinnedRanges = pinnedRanges.filter(p => p.id !== id);
+  updateContextUI();
+}
+
+function clearAllPinned() {
+  pinnedRanges = [];
+  updateContextUI();
+}
+
+function togglePinnedRangeMode(id) {
+  const p = pinnedRanges.find(x => x.id === id);
+  if (p) {
+    p.mode = p.mode === 'full' ? 'sample' : 'full';
+    updateContextUI();
+  }
+}
+
+async function getPinnedContext() {
+  if (pinnedRanges.length === 0) return [];
+
+  return Excel.run(async (ctx) => {
+    const results = [];
+    for (const p of pinnedRanges) {
+      try {
+        const sheet = ctx.workbook.worksheets.getItem(p.sheet);
+        const range = sheet.getRange(p.range);
+        range.load('values,formulas,rowCount,columnCount');
+        await ctx.sync();
+
+        let values = range.values || [];
+        let formulas = range.formulas || [];
+
+        if (p.mode === 'sample' && range.rowCount > (p.sampleRows || DEFAULT_SAMPLE_ROWS)) {
+          const limit = p.sampleRows || DEFAULT_SAMPLE_ROWS;
+          values = values.slice(0, limit);
+          formulas = formulas.slice(0, limit);
+        }
+
+        const headers = values.length > 0 ? values[0].map(v => (v != null ? String(v).trim() : '')) : [];
+        results.push({
+          sheet: p.sheet,
+          range: p.range,
+          label: p.label,
+          headers,
+          values,
+          formulas
+        });
+      } catch (e) {
+        results.push({ sheet: p.sheet, range: p.range, error: e.message });
+      }
+    }
+    return results;
+  });
+}
+
+function updateContextUI() {
+  const badge = document.getElementById('context-badge');
+  if (badge) {
+    badge.textContent = pinnedRanges.length;
+    badge.classList.toggle('hidden', pinnedRanges.length === 0);
+  }
+  renderPinnedChips();
+  updateTokenMeter();
+}
+
+function toggleContextPanel() {
+  const panel = document.getElementById('context-panel');
+  if (!panel) return;
+  const isHidden = panel.classList.toggle('hidden');
+  if (!isHidden) loadSheetList();
+}
+
+function closeContextPanel() {
+  const panel = document.getElementById('context-panel');
+  if (panel) panel.classList.add('hidden');
+}
+
+async function loadSheetList() {
+  const container = document.getElementById('sheet-list');
+  if (!container) return;
+
+  try {
+    const sheetData = await Excel.run(async (ctx) => {
+      const sheets = ctx.workbook.worksheets;
+      sheets.load('items/name');
+      await ctx.sync();
+
+      const result = [];
+      for (const ws of sheets.items) {
+        let usedRangeAddr = null;
+        let rows = 0;
+        let cols = 0;
+        let tables = [];
+
+        try {
+          const usedRange = ws.getUsedRange();
+          usedRange.load('address,rowCount,columnCount');
+          await ctx.sync();
+          usedRangeAddr = usedRange.address.replace(/^.*!/, '');
+          rows = usedRange.rowCount;
+          cols = usedRange.columnCount;
+        } catch (e) {
+          /* empty sheet */
+        }
+
+        try {
+          const tbls = ws.tables;
+          tbls.load('items/name,items/range/address');
+          await ctx.sync();
+          for (const t of tbls.items) {
+            const addr = t.range.address.replace(/^.*!/, '');
+            tables.push({ name: t.name, range: addr });
+          }
+        } catch (e) {
+          /* no tables */
+        }
+
+        result.push({
+          name: ws.name,
+          usedRange: usedRangeAddr,
+          rows,
+          cols,
+          tables
+        });
+      }
+      return result;
+    });
+
+    container.innerHTML = '';
+    for (const s of sheetData) {
+      const row = document.createElement('div');
+      row.className = 'sheet-row';
+      const summary = s.usedRange ? `${s.usedRange} — ${s.rows} rows × ${s.cols} cols` : 'Empty';
+      row.innerHTML = `
+        <div class="sheet-row-header" data-sheet="${escapeHtml(s.name)}">
+          <span class="sheet-row-name">${escapeHtml(s.name)}</span>
+          <span class="sheet-row-summary">${escapeHtml(summary)}</span>
+        </div>
+        <div class="sheet-row-body hidden">
+          ${s.tables.map(t => `<button type="button" class="sheet-table-chip" data-sheet="${escapeHtml(s.name)}" data-range="${escapeHtml(t.range)}" data-label="${escapeHtml(t.name)}">${escapeHtml(t.name)} (${escapeHtml(t.range)})</button>`).join('')}
+          <div class="sheet-custom-range">
+            <input type="text" placeholder="e.g. A1:D50" data-sheet="${escapeHtml(s.name)}" />
+            <button type="button" class="sheet-custom-add" data-sheet="${escapeHtml(s.name)}">Add</button>
+          </div>
+        </div>
+      `;
+      container.appendChild(row);
+    }
+  } catch (err) {
+    console.warn('Could not load sheet list:', err);
+    container.innerHTML = '<p style="color: var(--text-muted); font-size: 13px;">Could not load sheets. Make sure Excel is ready.</p>';
+  }
+}
+
+function renderPinnedChips() {
+  const container = document.getElementById('pinned-chips');
+  if (!container) return;
+
+  container.innerHTML = '';
+  for (const p of pinnedRanges) {
+    const chip = document.createElement('div');
+    chip.className = 'pinned-chip';
+    const modeLabel = p.mode === 'sample' ? `Sample (${p.sampleRows})` : 'Full';
+    chip.innerHTML = `
+      <span class="pinned-chip-label" data-id="${p.id}">${escapeHtml(p.label)} (${modeLabel})</span>
+      <button type="button" class="pinned-chip-remove" data-id="${p.id}" aria-label="Remove">×</button>
+    `;
+    container.appendChild(chip);
+  }
+}
+
+function updateTokenMeter() {
+  const fill = document.getElementById('token-meter-fill');
+  const label = document.getElementById('token-meter-label');
+  const modelSelect = document.getElementById('model-select');
+  if (!fill || !label) return;
+
+  const tokens = estimatePinnedTokensSync();
+  const maxTokens = getContextWindowSize(modelSelect ? modelSelect.value : null);
+  const pct = maxTokens > 0 ? (tokens / maxTokens) * 100 : 0;
+
+  fill.style.width = Math.min(pct, 100) + '%';
+  fill.classList.remove('safe', 'warning', 'danger');
+  if (pct < 50) fill.classList.add('safe');
+  else if (pct < 80) fill.classList.add('warning');
+  else fill.classList.add('danger');
+
+  const maxK = Math.round(maxTokens / 1000);
+  label.textContent = `~${tokens.toLocaleString()} tokens (${pct.toFixed(1)}% of ${maxK}k)`;
+}
+
+async function captureCurrentSelection() {
+  try {
+    const result = await Excel.run(async (ctx) => {
+      const range = ctx.workbook.getSelectedRange();
+      const sheet = ctx.workbook.worksheets.getActiveWorksheet();
+      range.load('address,rowCount,columnCount');
+      sheet.load('name');
+      await ctx.sync();
+      return {
+        sheet: sheet.name,
+        range: range.address.replace(/^.*!/, ''),
+        rowCount: range.rowCount,
+        columnCount: range.columnCount
+      };
+    });
+    await addPinnedRange(result.sheet, result.range, `${result.sheet}!${result.range}`, 'full', result.rowCount, result.columnCount);
+  } catch (err) {
+    console.warn('Could not capture selection:', err);
+    addMessage('Could not capture selection. Make sure a range is selected.', 'assistant', { className: 'tool-status' });
+  }
+}
+
 Office.onReady((info) => {
   if (info.host === Office.HostType.Excel) {
     document.getElementById('send-btn').addEventListener('click', onSend);
     document.getElementById('new-chat-btn').addEventListener('click', onNewChat);
     document.getElementById('undo-all-btn').addEventListener('click', undoAllChanges);
     document.getElementById('export-chat-btn').addEventListener('click', exportChatHistory);
+    document.getElementById('context-btn').addEventListener('click', toggleContextPanel);
+    document.getElementById('context-panel-close').addEventListener('click', closeContextPanel);
+    document.getElementById('capture-selection-btn').addEventListener('click', captureCurrentSelection);
+
+    const modelSelect = document.getElementById('model-select');
+    if (modelSelect) modelSelect.addEventListener('change', updateTokenMeter);
+
+    // Event delegation for sheet list (expand, add table, add custom range)
+    const sheetList = document.getElementById('sheet-list');
+    if (sheetList) {
+      sheetList.addEventListener('click', (e) => {
+        if (e.target.classList.contains('sheet-row-header')) {
+          const body = e.target.nextElementSibling;
+          if (body) body.classList.toggle('hidden');
+        } else if (e.target.classList.contains('sheet-table-chip')) {
+          const sheet = e.target.getAttribute('data-sheet');
+          const range = e.target.getAttribute('data-range');
+          const label = e.target.getAttribute('data-label');
+          if (sheet && range) addPinnedRange(sheet, range, label || `${sheet}!${range}`);
+        } else if (e.target.classList.contains('sheet-custom-add')) {
+          const sheet = e.target.getAttribute('data-sheet');
+          const input = e.target.previousElementSibling;
+          const range = input && input.value ? input.value.trim() : '';
+          if (sheet && range) {
+            addPinnedRange(sheet, range);
+            if (input) input.value = '';
+          }
+        }
+      });
+    }
+
+    // Event delegation for pinned chips (remove, toggle mode)
+    const pinnedChips = document.getElementById('pinned-chips');
+    if (pinnedChips) {
+      pinnedChips.addEventListener('click', (e) => {
+        const id = e.target.getAttribute('data-id');
+        if (!id) return;
+        if (e.target.classList.contains('pinned-chip-remove')) {
+          removePinnedRange(id);
+        } else if (e.target.classList.contains('pinned-chip-label')) {
+          togglePinnedRangeMode(id);
+        }
+      });
+    }
 
     // Event delegation for clickable cell citations
     document.getElementById('message-thread').addEventListener('click', (e) => {
@@ -98,8 +424,10 @@ async function checkBackendHealth() {
 
 function onNewChat() {
   conversationHistory = [];
+  pinnedRanges = [];
   document.getElementById('message-thread').innerHTML = '';
   clearChangeLog();
+  updateContextUI();
   showWelcomeScreen();
 }
 
@@ -498,6 +826,14 @@ async function onSend() {
     context = await getContext();
   } catch (err) {
     console.warn('Could not get context:', err);
+  }
+
+  if (pinnedRanges.length > 0) {
+    try {
+      context.pinnedRanges = await getPinnedContext();
+    } catch (err) {
+      console.warn('Could not read pinned context:', err);
+    }
   }
 
   try {

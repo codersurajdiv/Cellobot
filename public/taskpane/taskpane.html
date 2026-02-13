@@ -49,6 +49,26 @@
       <div id="message-thread" class="message-thread"></div>
     </main>
 
+    <div id="context-panel" class="context-panel hidden">
+      <div class="context-panel-header">
+        <h3>Pinned Context</h3>
+        <button id="context-panel-close" type="button" class="header-btn" aria-label="Close">×</button>
+      </div>
+
+      <div class="token-meter">
+        <div class="token-meter-bar">
+          <div id="token-meter-fill" class="token-meter-fill"></div>
+        </div>
+        <span id="token-meter-label" class="token-meter-label">0 tokens (0%)</span>
+      </div>
+
+      <div id="pinned-chips" class="pinned-chips"></div>
+
+      <button id="capture-selection-btn" type="button" class="capture-btn">Capture Current Selection</button>
+
+      <div id="sheet-list" class="sheet-list"></div>
+    </div>
+
     <div id="change-tracker" class="change-tracker hidden">
       <span class="change-count">0 changes made</span>
       <button id="undo-all-btn" type="button" class="undo-btn" aria-label="Undo all changes">Undo All</button>
@@ -56,6 +76,15 @@
 
     <div class="input-area">
       <div class="input-container">
+        <button id="context-btn" type="button" class="context-btn" aria-label="Add context" title="Add context">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
+            <rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
+            <rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
+            <rect x="14" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="2"/>
+          </svg>
+          <span id="context-badge" class="context-badge hidden">0</span>
+        </button>
         <select id="model-select" class="model-pill" aria-label="Select AI model">
           <option value="claude-sonnet">Sonnet 4.5</option>
           <option value="claude-opus">Opus 4.6</option>
