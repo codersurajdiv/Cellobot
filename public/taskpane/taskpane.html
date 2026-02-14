@@ -22,6 +22,13 @@
         <h1 class="app-title">CelloBot</h1>
       </div>
       <div class="header-actions">
+        <span id="context-indicator" class="context-indicator"></span>
+        <button id="context-btn" type="button" class="header-btn" aria-label="Context" title="Manage context">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M4 6h16M4 12h16M4 18h16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <span id="context-badge" class="context-badge hidden">0</span>
+        </button>
         <button id="export-chat-btn" type="button" class="header-btn" aria-label="Export chat" title="Export chat">
           <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -34,6 +41,47 @@
         </button>
       </div>
     </header>
+
+    <!-- Quick Access Tools -->
+    <div class="quick-tools">
+      <div class="quick-tools-row">
+        <button type="button" class="quick-tool-btn" data-skill="monthly-budget">Budget</button>
+        <button type="button" class="quick-tool-btn" data-skill="expense-tracker">Expenses</button>
+        <button type="button" class="quick-tool-btn" data-skill="pivot-tables">Pivot</button>
+        <button type="button" class="quick-tool-btn" data-skill="charts">Charts</button>
+        <button type="button" class="quick-tool-btn" data-skill="financial-model">Model</button>
+        <button type="button" class="quick-tool-btn" data-skill="fix-errors">Fix Errors</button>
+      </div>
+    </div>
+
+    <!-- Context Panel (overlay) -->
+    <div id="context-panel" class="context-panel hidden">
+      <div class="context-panel-header">
+        <h3>Context Manager</h3>
+        <button id="context-panel-close" type="button" class="header-btn" aria-label="Close">
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Token meter -->
+      <div class="token-meter">
+        <div class="token-meter-bar">
+          <div id="token-meter-fill" class="token-meter-fill safe" style="width: 0%"></div>
+        </div>
+        <span id="token-meter-label" class="token-meter-label">~0 tokens (0.0% of 200k)</span>
+      </div>
+
+      <!-- Pinned ranges -->
+      <div id="pinned-chips" class="pinned-chips"></div>
+
+      <!-- Capture selection button -->
+      <button id="capture-selection-btn" type="button" class="capture-btn">+ Pin current selection</button>
+
+      <!-- Sheet list -->
+      <div id="sheet-list" class="sheet-list"></div>
+    </div>
 
     <main id="chat-messages" class="chat-area">
       <div id="welcome-screen" class="welcome-screen">
