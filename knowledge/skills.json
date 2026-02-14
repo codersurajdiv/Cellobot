@@ -1,0 +1,32 @@
+[
+  {
+    "id": "monthly-budget",
+    "name": "Monthly Budget",
+    "tags": ["budget", "income", "expense", "savings", "monthly", "spending", "track spending", "money"],
+    "content": "## Monthly Budget Template\n\n**Cell layout (starting at A1):**\n- Row 1 headers: Category | Budget | Actual | Variance | % Used\n- Section 1 (Income): Salary, Freelance, Other\n- Section 2 (Expenses): Rent, Utilities, Groceries, Transport, Entertainment, etc.\n- Section 3 (Summary): Total Income, Total Expenses, Net Savings\n\n**Tool sequence:**\n1. write_cells: Write headers in row 1 (A1:E1)\n2. write_cells: Write category names in column A\n3. write_cells: Leave Budget and Actual columns for user input; add formulas in Variance (D) and % Used (E)\n\n**Key formulas:**\n- Variance: =C2-B2 (Actual - Budget)\n- % Used: =IF(B2=0,\"\",C2/B2) or format as percentage\n- Total Income: =SUM(B2:B4) for income section\n- Total Expenses: =SUM(B6:B12) for expense section\n- Net Savings: =Total_Income_Cell - Total_Expenses_Cell\n\n**Formatting:**\n- Column B, C, D: Currency format ($#,##0.00)\n- Column E: Percentage (0%)\n- Use add_conditional_format for Variance: red if negative (over budget), green if positive\n- Use format_cells for header row (bold, fill)\n\n**Variations:** For weekly budget, change headers to \"Weekly Budget\" and \"Weekly Actual\". Same structure applies."
+  },
+  {
+    "id": "expense-tracker",
+    "name": "Expense Tracker",
+    "tags": ["expense", "track", "spending", "receipt", "category", "costs", "break down", "log", "transactions"],
+    "content": "## Expense Tracker\n\n**Cell layout (starting at A1):**\n- Row 1 headers: Date | Category | Amount | Notes\n- Data starts row 2; user logs each transaction\n\n**Tool sequence:**\n1. write_cells: Headers in A1:D1\n2. write_cells: Add a few sample rows or leave blank for user\n3. set_data_validation: Add dropdown for Category column with common categories (Groceries, Transport, Dining, Utilities, Entertainment, etc.)\n4. format_cells: Date column as date format (yyyy-mm-dd), Amount as currency\n\n**Summary section (below data or on same sheet):**\n- Use SUMIFS to total by category: =SUMIFS(C:C,B:B,\"Groceries\")\n- Or create a pivot table using create_pivot_table for dynamic category summaries\n\n**Key formulas:**\n- Total spent: =SUM(C2:C100)\n- By category: =SUMIFS(C:C,B:B,\"CategoryName\")\n\n**Formatting:**\n- Column A: Date format\n- Column C: Currency\n- Consider format_cells for header row\n\n**Pivot table option:** If user has many rows, suggest create_pivot_table with rows=Category, values=Sum of Amount for a clean summary."
+  },
+  {
+    "id": "pivot-tables",
+    "name": "Pivot Tables",
+    "tags": ["pivot", "pivot table", "summarize", "group", "aggregate", "breakdown", "by category", "summary", "report"],
+    "content": "## Pivot Tables\n\n**When to use:** User wants to summarize, group, or aggregate data (e.g., \"sum by region\", \"count by category\", \"average by month\").\n\n**Tool:** create_pivot_table\n\n**Parameters:**\n- sourceSheet, sourceRange: The data range (must have headers in first row)\n- destinationSheet, destinationCell: Where to place the pivot table\n- rows: Field names to group by (e.g., \"Category\", \"Region\")\n- columns: Optional; field for column grouping\n- values: Array of {field, aggregation} e.g. [{field:\"Amount\", aggregation:\"Sum\"}]\n- filters: Optional; field names for report filters\n\n**Common layouts:**\n- Sales by region: rows=[\"Region\"], values=[{field:\"Sales\", aggregation:\"Sum\"}]\n- Count by category: rows=[\"Category\"], values=[{field:\"Category\", aggregation:\"Count\"}]\n- Amount by month: rows=[\"Date\"] (may need date grouping), values=[{field:\"Amount\", aggregation:\"Sum\"}]\n\n**Important:** Source data must be in a contiguous range with a header row. Use get_workbook_info or read_range to confirm structure before creating.\n\n**After creation:** User can refresh with refresh_pivot_table if source data changes."
+  },
+  {
+    "id": "charts",
+    "name": "Charts",
+    "tags": ["chart", "graph", "visualize", "plot", "bar", "line", "pie", "trend", "comparison"],
+    "content": "## Charts\n\n**Tool:** create_chart\n\n**Chart type selection:**\n- Bar/Column: Compare categories (e.g., sales by region, budget vs actual)\n- Line: Show trends over time (e.g., monthly revenue)\n- Pie: Show composition/parts of whole (e.g., expense breakdown by category)\n- Combo: Mix bar and line (e.g., revenue bars + profit line)\n\n**Parameters:**\n- sheet, chartType, dataRange, title, position (e.g., \"E2\")\n- dataRange should include headers and data (e.g., A1:B10)\n\n**Tool sequence:**\n1. read_range or use context to understand the data layout\n2. create_chart with appropriate chartType and dataRange\n3. Optionally edit_chart for axis labels, legend position\n\n**Formatting tips:**\n- Use clear titles that describe what the chart shows\n- For time series, ensure dates are in chronological order\n- For pie charts, limit to ~5-7 segments for readability\n\n**Common mistakes:** Don't include totals in the data range if they would double-count. Ensure dataRange has headers in first row."
+  },
+  {
+    "id": "financial-model",
+    "name": "Simple Financial Model",
+    "tags": ["model", "financial", "revenue", "profit", "growth", "forecast", "projection", "sensitivity", "assumptions"],
+    "content": "## Simple Financial Model\n\n**Structure:**\n- Assumptions section (inputs): Growth rate, margins, etc.\n- Revenue: Prior year or base, then =prior*(1+growth_rate) for projections\n- Costs: Fixed + variable, or as % of revenue\n- Profit: Revenue - Costs\n\n**Cell layout example:**\n- A1:A5: Labels (Revenue, Costs, Profit, Growth Rate)\n- B1:B3: Formulas; B4: Assumption (e.g., 0.05 for 5%)\n- Columns C, D, E: Year 1, 2, 3 projections\n\n**Key formulas:**\n- Revenue growth: =B1*(1+$B$4) (lock assumption cell)\n- Cost as % of revenue: =B1*0.6 (60% cost ratio)\n- Profit: =B1-B2\n\n**Tool sequence:**\n1. write_cells: Assumptions and labels\n2. write_cells: Base year values\n3. write_cells: Projection formulas using cell references\n4. format_cells: Currency for money, percentage for rates\n\n**Sensitivity:** For simple sensitivity, create a two-way layout: vary growth rate in rows, show resulting profit. Use formulas that reference the assumption cell.\n\n**Formatting:** Use number formats: $#,##0 for currency, 0% for growth rate. Bold assumptions section."
+  }
+]

@@ -102,6 +102,40 @@ body {
   color: var(--text-primary);
 }
 
+/* Quick Access Tools */
+.quick-tools {
+  flex-shrink: 0;
+  padding: 8px 16px;
+  background: var(--bg-secondary);
+  border-bottom: 1px solid var(--border);
+}
+
+.quick-tools-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.quick-tool-btn {
+  flex: 1;
+  min-width: 52px;
+  padding: 6px 10px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.quick-tool-btn:hover {
+  background: var(--accent-muted);
+  border-color: var(--accent);
+  color: var(--text-primary);
+}
+
 /* Chat area */
 .chat-area {
   flex: 1;

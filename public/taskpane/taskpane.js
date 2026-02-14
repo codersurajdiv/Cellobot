@@ -523,6 +523,26 @@ Office.onReady((info) => {
         }
       });
     });
+
+    // Quick Access Tools
+    const QUICK_TOOL_PROMPTS = {
+      'monthly-budget': 'Create a monthly budget template on this sheet. Set up categories for income and expenses with Budget, Actual, Variance, and % Used columns. Include formulas and conditional formatting for over-budget items.',
+      'expense-tracker': 'Create an expense tracker starting at the current selection. Set up Date, Category, Amount, and Notes columns with data validation for categories and a summary section.',
+      'pivot-tables': 'Create a pivot table from my selected data. Choose appropriate row groupings and value aggregations based on the data structure.',
+      'charts': 'Create a chart from my selected data. Choose the best chart type based on the data and add a descriptive title.',
+      'financial-model': 'Build a simple financial model on this sheet with an assumptions section, revenue projections using growth rates, cost structure, and profit calculations.'
+    };
+
+    document.querySelectorAll('.quick-tool-btn').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const skillId = btn.getAttribute('data-skill');
+        const message = QUICK_TOOL_PROMPTS[skillId];
+        if (!message) return;
+        input.value = message;
+        autoResizeTextarea({ target: input });
+        onSend();
+      });
+    });
   }
 });
 
