@@ -6,7 +6,7 @@
  */
 
 // Tools that modify the workbook and should be tracked
-const TRACKED_TOOLS = ['write_cells', 'format_cells', 'sort_range', 'add_conditional_format', 'set_data_validation'];
+const TRACKED_TOOLS = ['write_cells', 'write_cells_force', 'format_cells', 'sort_range', 'add_conditional_format', 'set_data_validation'];
 
 async function executeTool(toolName, toolInput) {
   // Record before state for tracked tools
@@ -23,6 +23,9 @@ async function executeTool(toolName, toolInput) {
   switch (toolName) {
     case 'write_cells':
       result = await writeCells(toolInput);
+      break;
+    case 'write_cells_force':
+      result = await writeCellsForce(toolInput);
       break;
     case 'read_range':
       return await readRange(toolInput);
@@ -103,8 +106,12 @@ async function writeCells(input) {
     }
 
     if (nonEmptyCount > 0) {
-      // Log a warning — the confirmation UX (Phase 4.4) will handle user approval
-      console.warn(`Overwriting ${nonEmptyCount} non-empty cell(s) in ${input.sheet}!${input.range}`);
+      return {
+        pending: true,
+        nonEmptyCount,
+        sheet: input.sheet,
+        range: input.range
+      };
     }
 
     if (input.formulas) {
@@ -116,9 +123,25 @@ async function writeCells(input) {
     }
 
     await ctx.sync();
+    return { success: true, message: `Wrote to ${input.sheet}!${input.range}` };
+  });
+}
 
-    const overwriteNote = nonEmptyCount > 0 ? ` (overwrote ${nonEmptyCount} existing cell${nonEmptyCount === 1 ? '' : 's'})` : '';
-    return { success: true, message: `Wrote to ${input.sheet}!${input.range}${overwriteNote}` };
+async function writeCellsForce(input) {
+  return Excel.run(async (ctx) => {
+    const sheet = ctx.workbook.worksheets.getItem(input.sheet);
+    const range = sheet.getRange(input.range);
+
+    if (input.formulas) {
+      range.formulas = input.formulas;
+    } else if (input.values) {
+      range.values = input.values;
+    } else {
+      return { success: false, error: 'Either values or formulas must be provided' };
+    }
+
+    await ctx.sync();
+    return { success: true, message: `Wrote to ${input.sheet}!${input.range}` };
   });
 }
 

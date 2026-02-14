@@ -430,7 +430,12 @@ Office.onReady((info) => {
   if (info.host === Office.HostType.Excel) {
     document.getElementById('send-btn').addEventListener('click', onSend);
     document.getElementById('new-chat-btn').addEventListener('click', onNewChat);
-    document.getElementById('undo-all-btn').addEventListener('click', undoAllChanges);
+    document.getElementById('undo-all-btn').addEventListener('click', async () => {
+  const count = await undoAllChanges();
+  if (count > 0) {
+    addMessage(`Reverted ${count} change${count === 1 ? '' : 's'}.`, 'assistant', { className: 'tool-status' });
+  }
+});
     document.getElementById('export-chat-btn').addEventListener('click', exportChatHistory);
     document.getElementById('context-btn').addEventListener('click', toggleContextPanel);
     document.getElementById('context-panel-close').addEventListener('click', closeContextPanel);
@@ -530,7 +535,8 @@ Office.onReady((info) => {
       'expense-tracker': 'Create an expense tracker starting at the current selection. Set up Date, Category, Amount, and Notes columns with data validation for categories and a summary section.',
       'pivot-tables': 'Create a pivot table from my selected data. Choose appropriate row groupings and value aggregations based on the data structure.',
       'charts': 'Create a chart from my selected data. Choose the best chart type based on the data and add a descriptive title.',
-      'financial-model': 'Build a simple financial model on this sheet with an assumptions section, revenue projections using growth rates, cost structure, and profit calculations.'
+      'financial-model': 'Build a simple financial model on this sheet with an assumptions section, revenue projections using growth rates, cost structure, and profit calculations.',
+      'fix-errors': 'Scan the current sheet for formula errors (like #REF!, #VALUE!, #N/A, #DIV/0!) and explain what is wrong and how to fix each one.'
     };
 
     document.querySelectorAll('.quick-tool-btn').forEach((btn) => {
@@ -900,6 +906,34 @@ function addMessage(content, role, options = {}) {
   div.scrollIntoView({ behavior: 'smooth' });
 }
 
+function showOverwriteConfirmation(pending) {
+  return new Promise((resolve) => {
+    const div = document.createElement('div');
+    div.className = 'message overwrite-confirm';
+    const msg = document.createElement('span');
+    msg.textContent = `CelloBot wants to overwrite ${pending.nonEmptyCount} non-empty cell(s) in ${pending.sheet}!${pending.range}. Allow?`;
+    div.appendChild(msg);
+    const allowBtn = document.createElement('button');
+    allowBtn.className = 'confirm-btn allow';
+    allowBtn.textContent = 'Allow';
+    allowBtn.onclick = () => {
+      div.remove();
+      resolve(true);
+    };
+    const cancelBtn = document.createElement('button');
+    cancelBtn.className = 'confirm-btn cancel';
+    cancelBtn.textContent = 'Cancel';
+    cancelBtn.onclick = () => {
+      div.remove();
+      resolve(false);
+    };
+    div.appendChild(allowBtn);
+    div.appendChild(cancelBtn);
+    document.getElementById('message-thread').appendChild(div);
+    div.scrollIntoView({ behavior: 'smooth' });
+  });
+}
+
 function navigateToCell(ref) {
   safeExcelRun(async (context) => {
     // Handle references like "Sheet1!A1" or just "A1"
@@ -1115,7 +1149,17 @@ async function processChat(messages, modelValue, context, loadingId, pendingMess
               for (const toolCall of data.toolCalls) {
                 try {
                   addMessage(`Executing: ${toolCall.name}...`, 'assistant', { className: 'tool-status' });
-                  const output = await executeTool(toolCall.name, toolCall.input);
+                  let output = await executeTool(toolCall.name, toolCall.input);
+
+                  if (output && output.pending) {
+                    const allowed = await showOverwriteConfirmation(output);
+                    if (allowed) {
+                      output = await executeTool('write_cells_force', toolCall.input);
+                    } else {
+                      output = { success: false, error: 'User cancelled overwrite' };
+                    }
+                  }
+
                   results.push({ id: toolCall.id, output });
                 } catch (err) {
                   results.push({ id: toolCall.id, output: { success: false, error: err.message } });

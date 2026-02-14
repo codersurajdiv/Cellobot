@@ -106,9 +106,12 @@ async function highlightChangedCells(sheet, range) {
 
 /**
  * Undo all changes made by CelloBot in reverse order.
+ * @returns {number} The number of changes reverted.
  */
 async function undoAllChanges() {
-  if (changeLog.length === 0) return;
+  if (changeLog.length === 0) return 0;
+
+  const count = changeLog.length;
 
   // Process in reverse order
   const changes = [...changeLog].reverse();
@@ -144,6 +147,7 @@ async function undoAllChanges() {
   // Clear the log
   changeLog.length = 0;
   updateChangeUI();
+  return count;
 }
 
 /**
