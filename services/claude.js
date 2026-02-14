@@ -1,7 +1,7 @@
 const Anthropic = require('@anthropic-ai/sdk');
 const { anthropicTools } = require('../tools/definitions');
 
-const DEFAULT_MODEL = 'claude-sonnet-4-5-20250514';
+const DEFAULT_MODEL = 'claude-sonnet-4-5-20250929';
 
 function getClient() {
   if (!process.env.ANTHROPIC_API_KEY) {

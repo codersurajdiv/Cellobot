@@ -5,17 +5,17 @@ function resolveModel(modelValue) {
   const val = (modelValue || 'claude-sonnet').toLowerCase();
   switch (val) {
     case 'claude-opus':
-      return { provider: 'claude', modelId: 'claude-opus-4-20250918' };
+      return { provider: 'claude', modelId: 'claude-opus-4-6' };
     case 'claude-sonnet':
     case 'claude':
-      return { provider: 'claude', modelId: 'claude-sonnet-4-5-20250514' };
+      return { provider: 'claude', modelId: 'claude-sonnet-4-5-20250929' };
     case 'openai-4o':
       return { provider: 'openai', modelId: 'gpt-4o' };
     case 'openai-4o-mini':
     case 'openai':
       return { provider: 'openai', modelId: 'gpt-4o-mini' };
     default:
-      return { provider: 'claude', modelId: 'claude-sonnet-4-5-20250514' };
+      return { provider: 'claude', modelId: 'claude-sonnet-4-5-20250929' };
   }
 }
 

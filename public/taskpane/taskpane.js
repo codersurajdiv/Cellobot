@@ -1101,9 +1101,10 @@ async function processChat(messages, modelValue, context, loadingId, pendingMess
           const lines = buffer.split('\n');
           buffer = lines.pop(); // Keep incomplete line in buffer
 
+          let currentEvent = null;
           for (const line of lines) {
             if (line.startsWith('event: ')) {
-              var currentEvent = line.substring(7).trim();
+              currentEvent = line.substring(7).trim();
             } else if (line.startsWith('data: ') && currentEvent) {
               try {
                 const data = JSON.parse(line.substring(6));

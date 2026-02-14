@@ -22,12 +22,12 @@ const anthropicTools = [
         },
         values: {
           type: 'array',
-          items: { type: 'array' },
+          items: { type: 'array', items: { type: 'string' } },
           description: '2D array of values to write. Each inner array is a row. Use this for plain values.'
         },
         formulas: {
           type: 'array',
-          items: { type: 'array' },
+          items: { type: 'array', items: { type: 'string' } },
           description: '2D array of formulas to write. Each inner array is a row. Formulas must start with "=". If provided, takes precedence over values.'
         }
       },
@@ -57,8 +57,7 @@ const anthropicTools = [
     description: 'Get detailed information about the workbook structure: all sheet names, used ranges, tables, and named ranges. Use this when you need to understand the overall workbook layout.',
     input_schema: {
       type: 'object',
-      properties: {},
-      required: []
+      properties: {}
     }
   },
   {
