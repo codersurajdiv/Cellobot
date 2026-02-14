@@ -520,6 +520,19 @@ body {
   color: var(--text-muted);
 }
 
+.send-btn.hidden,
+.refresh-btn.hidden {
+  display: none;
+}
+
+.refresh-btn {
+  background: #4caf50;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  background: #43a047;
+}
+
 .error-message {
   color: #e57373;
   font-size: 13px;

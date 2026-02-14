@@ -11,6 +11,13 @@ window.addEventListener('unhandledrejection', function(event) {
   event.preventDefault();
 });
 
+// Mark context stale when user switches back to add-in from Excel (no Excel.run - safe)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    markContextStale();
+  }
+});
+
 // Auto-detect dev vs production environment
 const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
   ? `https://${window.location.host}`
@@ -35,6 +42,9 @@ let conversationHistory = [];
 // Pinned context ranges (persists per chat session)
 // Each entry: { id, sheet, range, label, mode: 'full'|'sample', sampleRows: 50, rowCount, columnCount }
 let pinnedRanges = [];
+
+// Context stale flag - when true, refresh button shows instead of send
+let contextStale = false;
 const DEFAULT_SAMPLE_ROWS = 50;
 const MAX_PINNED_CELLS = 100000;
 
@@ -266,7 +276,7 @@ function closeContextPanel() {
 }
 
 function updateContextIndicator() {
-  safeExcelRun(async (ctx) => {
+  return safeExcelRun(async (ctx) => {
     const sheet = ctx.workbook.worksheets.getActiveWorksheet();
     const range = ctx.workbook.getSelectedRange();
     sheet.load('name');
@@ -278,7 +288,33 @@ function updateContextIndicator() {
     if (el && result) {
       el.textContent = `${result.sheetName} · ${result.address}`;
     }
+    return result;
   });
+}
+
+function showSendButton() {
+  const sendBtn = document.getElementById('send-btn');
+  const refreshBtn = document.getElementById('refresh-btn');
+  if (sendBtn) sendBtn.classList.remove('hidden');
+  if (refreshBtn) refreshBtn.classList.add('hidden');
+}
+
+function showRefreshButton() {
+  const sendBtn = document.getElementById('send-btn');
+  const refreshBtn = document.getElementById('refresh-btn');
+  if (sendBtn) sendBtn.classList.add('hidden');
+  if (refreshBtn) refreshBtn.classList.remove('hidden');
+}
+
+function markContextStale() {
+  contextStale = true;
+  showRefreshButton();
+}
+
+async function refreshContext() {
+  await updateContextIndicator();
+  contextStale = false;
+  showSendButton();
 }
 
 async function loadSheetList() {
@@ -429,6 +465,12 @@ async function captureCurrentSelection() {
 Office.onReady((info) => {
   if (info.host === Office.HostType.Excel) {
     document.getElementById('send-btn').addEventListener('click', onSend);
+    document.getElementById('refresh-btn').addEventListener('click', async () => {
+      const btn = document.getElementById('refresh-btn');
+      if (btn) btn.disabled = true;
+      await refreshContext();
+      if (btn) btn.disabled = false;
+    });
     document.getElementById('new-chat-btn').addEventListener('click', onNewChat);
     document.getElementById('undo-all-btn').addEventListener('click', async () => {
   const count = await undoAllChanges();
@@ -501,18 +543,8 @@ Office.onReady((info) => {
 
     restoreState();
 
-    // Live context indicator (sheet + selection)
-    try {
-      safeExcelRun(async (ctx) => {
-        const sheet = ctx.workbook.worksheets.getActiveWorksheet();
-        sheet.onSelectionChanged.add(() => updateContextIndicator());
-        ctx.workbook.onActiveSheetChanged.add(() => updateContextIndicator());
-        await ctx.sync();
-      });
-      updateContextIndicator();
-    } catch (e) {
-      /* ignore */
-    }
+    // Initial context load (no background event handlers - prevents crashes)
+    refreshContext();
 
     // Check backend health on load
     checkBackendHealth();
@@ -1014,6 +1046,9 @@ async function onSend() {
   } catch (err) {
     console.warn('Could not get context:', err);
   }
+
+  contextStale = false;
+  showSendButton();
 
   if (pinnedRanges.length > 0) {
     try {
